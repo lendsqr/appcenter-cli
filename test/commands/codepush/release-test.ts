@@ -390,7 +390,7 @@ describe("codepush release command", () => {
         release_method: "releaseMethod",
         rollout: 100,
         size: 512,
-        upload_time: "uploadTime",
+        upload_time: 1687644084456,
       })
       .persist();
   }

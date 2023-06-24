@@ -12,7 +12,7 @@ import {
 } from "../../../util/commandline";
 import { CommandArgs } from "../../../util/commandline/command";
 import { AppCenterClient, models, clientRequest } from "../../../util/apis";
-import { out } from "../../../util/interaction";
+import { formatIsJson, out } from "../../../util/interaction";
 import { inspect } from "util";
 import * as fs from "fs";
 import * as pfs from "../../../util/misc/promisfied-fs";
@@ -22,6 +22,7 @@ import { isValidRange, isValidRollout, isValidDeployment, validateVersion } from
 import FileUploadClient, { MessageLevel } from "appcenter-file-upload-client";
 import { DefaultApp } from "../../../util/profile";
 import * as chalk from "chalk";
+import { formatDate } from "../deployment/lib/date-helper";
 
 const debug = require("debug")("appcenter-cli:commands:codepush:release-base");
 
@@ -134,7 +135,7 @@ export default class CodePushReleaseCommandBase extends AppCommand {
 
       const releaseUpload = this.upload(client, app, this.deploymentName, updateContentsZipPath);
       await out.progress("Uploading bundle...", releaseUpload);
-      await out.progress(
+      const release = await out.progress(
         "Creating CodePush release...",
         this.createRelease(client, app, this.deploymentName, {
           releaseUpload: await releaseUpload,
@@ -151,6 +152,14 @@ export default class CodePushReleaseCommandBase extends AppCommand {
           `${fs.lstatSync(this.updateContentsPath).isDirectory() ? "directory" : "file"}` +
           ` to the "${this.deploymentName}" deployment of the "${this.app.appName}" app.`
       );
+
+      if (formatIsJson()) {
+        out.table(out.getCommandOutputTableOptions([]), [release]);
+      } else {
+        out.table(out.getCommandOutputTableOptions(["Label", "Release Time", "App Version", "Mandatory"]), [
+          [release.label, formatDate(release.uploadTime), release.targetBinaryRange, release.isMandatory ? "Yes" : "No"],
+        ]);
+      }
 
       return success();
     } catch (error) {
@@ -191,12 +200,14 @@ export default class CodePushReleaseCommandBase extends AppCommand {
     app: DefaultApp,
     deploymentName: string,
     uploadedRelease: models.CodePushUploadedRelease
-  ): Promise<void> {
+  ): Promise<models.CodePushRelease> {
     debug(`Starting release process on deployment: ${deploymentName} with uploaded release metadata: ${inspect(uploadedRelease)}`);
 
-    await clientRequest<models.CodePushRelease>((cb) =>
-      client.codePushDeploymentReleases.create(deploymentName, uploadedRelease, app.ownerName, app.appName, cb)
-    );
+    return (
+      await clientRequest<models.CodePushRelease>((cb) =>
+        client.codePushDeploymentReleases.create(deploymentName, uploadedRelease, app.ownerName, app.appName, cb)
+      )
+    ).result;
   }
 
   private async uploadBundle(releaseUpload: models.CodePushReleaseUpload, bundleZipPath: string): Promise<void> {
